@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Plays a desktop sound when a session finishes its work, so you can step away and come back on completion.",
+  "license": "MIT",
+  "description": "Plays a desktop sound when a session finishes its work, and a different ping when it is waiting for your answer or approval.",
   "exports": {
     ".": "./index.js",
     "./audio": "./audio.js",
@@ -16,7 +17,8 @@
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "dsh": {
     "bundle": {

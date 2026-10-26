@@ -101,3 +101,7 @@ git clone https://github.com/neil-ji/dsh-session-chime.git
 - `audio.js`：合成两种声音（44.1 kHz / 16-bit / 单声道 WAV，写到系统临时目录并按音量缓存）并驱动一个常驻的 `powershell.exe` 助手进程。助手只在第一次出声时启动，之后每声只写一行 ASCII 命令（路径和中文文本以 base64 传递，避免 5.1 的管道编码问题），助手退出后自动重建；插件卸载时关闭它的 stdin。
 
 不依赖任何 npm 包，也不使用 `ctx.subprocess` 之类的工具沙箱服务：它需要的是这台机器的音频设备，而不是一个被沙箱约束的子进程。
+
+## 许可
+
+[MIT](LICENSE) © 2026 Neil Ji
