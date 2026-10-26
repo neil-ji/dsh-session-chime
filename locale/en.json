@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Session Completion Chime",
+    "description": "Plays a desktop sound when a session finishes its work, and a different one when it stops to ask you for an answer or an approval."
+  }
+}

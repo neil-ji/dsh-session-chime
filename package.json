@@ -1,0 +1,26 @@
+{
+  "name": "@local/session-chime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Plays a desktop sound when a session finishes its work, so you can step away and come back on completion.",
+  "exports": {
+    ".": "./index.js",
+    "./audio": "./audio.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "audio.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

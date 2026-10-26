@@ -1,0 +1,14 @@
+- insert:
+    - id: session-chime
+      name: '@local/session-chime'
+      config:
+        enabled: true
+        mode: chime
+        volume: 0.8
+        cooldownMs: 2500
+        settleMs: 1200
+        minRunMs: 500
+        notifyWaiting: true
+        waitingDelayMs: 400
+        waitingDedupeMs: 3000
+        includeSubagents: false
