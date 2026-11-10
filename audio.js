@@ -41,6 +41,26 @@
  * the same distinction the plugin is making in words. The rhythm difference is
  * the one that survives a bad speaker: three short events versus two long ones
  * is legible even when everything above 4 kHz is gone.
+ *
+ * ## The four-tier vocabulary
+ *
+ * The same two rules generate the whole set: **direction encodes good or bad,
+ * event count encodes how much is asked of you.**
+ *
+ * | sound | meaning | shape | count |
+ * |---|---|---|---|
+ * | `chime` | done | rising fifth, bell, 1.15 s | 2 |
+ * | `ping` | decide: answer a question, review a plan | three dry pips, minor third up | 3 |
+ * | `nudge` | approve: one tool call needs a click | two dry pips, **flat** | 2 |
+ * | `error` | it broke (failed, blocked, truncated) | minor third **down**, beating detune, dry | 2 |
+ * | `info` | a child agent finished; nothing for you | one soft low note, 0.3 s | 1 |
+ *
+ * `nudge` is flat rather than rising because it asks for one click, not a
+ * decision: it is the same "come back" family as `ping`, one notch smaller.
+ * `error` is the only descending figure in the set, so a downward pair can only
+ * mean something went wrong. `info` is the only single event, and it is the
+ * quietest and lowest, so a workflow's internal progress never competes with the
+ * sounds that want you.
  */
 
 import { spawn } from 'node:child_process';
@@ -171,7 +191,63 @@ const SOUNDS = {
       { at: 0.2, freq: 1396.91, gain: 1.0, decay: 0.11, attack: 0.0025 },
     ],
   },
+
+  /** Approve: two flat pips. Same family as `ping`, one notch smaller. */
+  nudge: {
+    duration: 0.42,
+    level: 0.85,
+    partials: [
+      { mult: 1, gain: 1 },
+      { mult: 2, gain: 0.2 },
+    ],
+    sub: 0,
+    mallet: { gain: 0.06, freq: 6000, decay: 0.0025 },
+    notes: [
+      { at: 0.0, freq: 1174.66, gain: 0.9, decay: 0.05, attack: 0.0025 },
+      { at: 0.14, freq: 1174.66, gain: 1.0, decay: 0.09, attack: 0.0025 },
+    ],
+  },
+
+  /**
+   * Failure: the only descending figure in the set, and the only one with
+   * beating partials. A minor third down reads as "wrong"; the 0.6 % detune
+   * beats at ~4 Hz, which is the roughness that makes a listener look up rather
+   * than find it musical.
+   */
+  error: {
+    duration: 0.62,
+    level: 0.95,
+    partials: [
+      { mult: 1, gain: 1 },
+      { mult: 1.006, gain: 0.5 },
+      { mult: 2, gain: 0.08 },
+    ],
+    sub: 0.1,
+    mallet: { gain: 0.05, freq: 3200, decay: 0.003 },
+    notes: [
+      { at: 0.0, freq: 659.25, gain: 1.0, decay: 0.16, attack: 0.004 },
+      { at: 0.16, freq: 554.37, gain: 0.95, decay: 0.26, attack: 0.004 },
+    ],
+  },
+
+  /** Information: one soft low note. A child finished; nothing is asked of you. */
+  info: {
+    duration: 0.3,
+    level: 0.62,
+    partials: [
+      { mult: 1, gain: 1 },
+      { mult: 2, gain: 0.06 },
+    ],
+    sub: 0.06,
+    mallet: { gain: 0.03, freq: 2600, decay: 0.002 },
+    notes: [
+      { at: 0.0, freq: 587.33, gain: 1.0, decay: 0.1, attack: 0.006 },
+    ],
+  },
 };
+
+/** Sound ids the renderers below cover, in seniority order. */
+export const SOUND_IDS = Object.freeze(['chime', 'ping', 'nudge', 'error', 'info']);
 
 /**
  * Render one earcon into a complete RIFF/WAVE file.
@@ -265,6 +341,26 @@ export function renderPing(volume = 0.8) {
   return synthesize(SOUNDS.ping, volume);
 }
 
+/** The "approve this" sound: two flat pips. */
+export function renderNudge(volume = 0.8) {
+  return synthesize(SOUNDS.nudge, volume);
+}
+
+/** The "it broke" sound: a minor third down, with a beating edge. */
+export function renderError(volume = 0.8) {
+  return synthesize(SOUNDS.error, volume);
+}
+
+/** The "a child finished" sound: one soft low note. */
+export function renderInfo(volume = 0.8) {
+  return synthesize(SOUNDS.info, volume);
+}
+
+/** Render any sound id; unknown ids fall back to the completion chime. */
+export function renderSound(sound, volume = 0.8) {
+  return synthesize(SOUNDS[sound] ?? SOUNDS.chime, volume);
+}
+
 /** Cache identity for one rendered clip: sound, spec, rate and volume. */
 export function assetName(sound, volume) {
   const key = String(Math.round(volume * 100));
@@ -289,7 +385,7 @@ export class DesktopChime {
    */
   constructor(options = {}) {
     this.mode = options.mode === 'speak' ? 'speak' : 'chime';
-    this.sound = options.sound === 'ping' ? 'ping' : 'chime';
+    this.sound = SOUND_IDS.includes(options.sound) ? options.sound : 'chime';
     this.volume = Number.isFinite(options.volume) ? options.volume : 0.8;
     this.speakText = typeof options.speakText === 'string' ? options.speakText : '';
     this.wavPath = typeof options.wavPath === 'string' ? options.wavPath : '';
@@ -550,7 +646,7 @@ export class DesktopChime {
         size = 0;
       }
       if (size < 1024) {
-        writeFileSync(path, this.sound === 'ping' ? renderPing(this.volume) : renderChime(this.volume));
+        writeFileSync(path, renderSound(this.sound, this.volume));
         this.log(`wrote ${this.sound} asset ${path}`);
       }
       this.assetPath = path;

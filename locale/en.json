@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Session Completion Chime",
-    "description": "Plays a desktop sound when a session finishes its work, and a different one when it stops to ask you for an answer or an approval."
+    "description": "Plays a rising bell when a session finishes, a falling tone when it fails or is blocked, three pips when it waits for your answer or plan review, two when it needs one approval, and a single soft note when a child agent finishes."
   }
 }

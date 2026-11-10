@@ -12,3 +12,9 @@
         waitingDelayMs: 400
         waitingDedupeMs: 3000
         includeSubagents: false
+        subagentSound: info
+        subagentAggregateMs: 3000
+        notifyOnFailure: true
+        notifyOnAbort: false
+        splitWaiting: true
+        deferWhileBusy: true
