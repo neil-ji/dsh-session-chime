@@ -171,6 +171,11 @@ console.log('asset cache');
   check('resolving a clip writes it to the temp dir', existsSync(path) && path.endsWith('.wav'), path);
   check('resolving twice reuses the same file', first.resolveWav() === path);
 
+  if (process.platform !== 'win32') {
+    const resolved = new DesktopChime({ log: () => {} }).resolvePlayer();
+    check('the resolved player is an absolute path that exists', resolved !== null && existsSync(resolved.command), JSON.stringify(resolved));
+  }
+
   const other = new DesktopChime({ volume: 0.41, log: () => {} });
   check('a different volume resolves to its own file', other.resolveWav() !== path);
 

@@ -296,8 +296,8 @@ export class DesktopChime {
     this.log = typeof options.log === 'function' ? options.log : () => {};
     this.child = null;
     this.disposed = false;
-    /** Resolved POSIX player, '' until looked up. */
-    this.player = null;
+    /** Resolved POSIX player `{ command, args }`; `undefined` until looked up. */
+    this.player = undefined;
     /** Path of the last rendered clip, reused across plays at the same volume. */
     this.assetPath = '';
   }
@@ -428,20 +428,30 @@ export class DesktopChime {
   }
 
   /**
-   * First available player for this platform, or '' when none is installed.
-   * @returns {string} absolute path or bare command name
+   * First available player for this platform, or null when none is installed.
+   *
+   * The returned command is always absolute, including the ones discovered on
+   * PATH: `spawnDetached` checks `existsSync` before spawning, so a bare name
+   * from PATH would be reported as missing.
+   *
+   * @returns {{command: string, args: string[]} | null} the player
    */
   resolvePlayer() {
-    if (this.player !== null) return this.player;
+    if (this.player !== undefined) return this.player;
     const candidates = POSIX_PLAYERS[process.platform] ?? [];
-    const found = candidates.find((candidate) => candidate.command.startsWith('/')
-      ? existsSync(candidate.command)
-      : findExecutable(candidate.command) !== '');
-    this.player = found ? found.command : '';
-    if (!this.player) {
+    let found = null;
+    for (const candidate of candidates) {
+      const command = candidate.command.startsWith('/') ? candidate.command : findExecutable(candidate.command);
+      if (command) {
+        found = { command, args: candidate.args };
+        break;
+      }
+    }
+    this.player = found;
+    if (!found) {
       this.log(`no audio player found (looked for ${candidates.map((candidate) => candidate.command).join(', ')})`);
     }
-    return this.player;
+    return found;
   }
 
   /**
@@ -470,9 +480,8 @@ export class DesktopChime {
     if (!player) return false;
     const path = this.resolveWav();
     if (!path) return false;
-    const args = POSIX_PLAYERS[process.platform]?.find((candidate) => candidate.command === player)?.args ?? [];
     this.log(`${this.sound} requested (${this.volume})`);
-    return this.spawnDetached(player, [...args, path]);
+    return this.spawnDetached(player.command, [...player.args, path]);
   }
 
   /** Kept for callers that referenced the macOS entry point by name. */
