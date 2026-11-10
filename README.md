@@ -4,10 +4,10 @@
 
 | 时机 | 声音 | 含义 |
 |---|---|---|
-| 会话把一段活儿干完（`running → idle`） | 1 秒的双音铃声 | "干完了，来下一条指令" |
-| 会话停下来等你回答 / 等你批准时 | 两声短促高音（约 0.5 秒） | "我在等你，回来确认一下" |
+| 会话把一段活儿干完（`running → idle`） | 1.15 秒双音铃声，C6→G6（纯五度上行） | "干完了，来下一条指令" |
+| 会话停下来等你回答 / 等你批准时 | 三声干脆短音，D6→D6→F6（小三度），0.6 秒 | "我在等你，回来确认一下" |
 
-两种声音明显不同，闭着眼也能听出是"完成"还是"要你确认"。
+两种声音明显不同，闭着眼也能听出是"完成"还是"要你确认"——下面解释为什么这么设计。
 
 ## 安装
 
@@ -17,9 +17,28 @@ git clone https://github.com/neil-ji/dsh-session-chime.git
 
 然后在 Harness 里把这个目录作为本地 bundle 装进你的 profile（Plugin Manager 的本地安装，或者让 Agent 用 `install_bundle` 指向该目录的绝对路径）。装好后输入 `/chime test` 应听到一声完成铃声，`/chime test waiting` 是"等你确认"的两声短音。
 
-- 平台：Windows（声音经 `System.Media.SoundPlayer` 播放），DSH 0.2.x。
+- 平台：Windows（`System.Media.SoundPlayer`）、macOS（`afplay`，`mode: speak` 走 `say`）、Linux（`pw-play` / `paplay` / `ffplay` / `aplay` 按顺序取第一个可用的，`mode: speak` 走 `spd-say`），DSH 0.2.x。
 - 依赖：无。不需要 pnpm 安装任何东西，也没有构建步骤。
-- 自测：`node test/selftest.mjs`（用静音 WAV 跑完整链路，不会打扰你）。
+- 自测：`node test/selftest.mjs`（用静音 WAV 跑完整链路，不会打扰你；54 项检查包括两种声音的节奏、衰减、结尾静音、响度接近程度，以及缓存失效逻辑）。
+
+## 两种声音为什么这样做
+
+提示音要在三种糟糕的条件下还能分辨：隔着房间、音量很低、叠着游戏声音。而且相当一部分人 8 kHz 以上听不清。这种情况下**音高是弱线索**——两段"上行双音"只有音不同，听者要记住上一次是什么样才能区分。
+
+这个插件的上一版正是这样：两个音都是"两个上行音，间隔 150 ms"，实测响度 -12.5 与 -12.7 LUFS，几乎一样。分不清"完成"和"叫你"，插件就退化成了"有动静"。
+
+所以现在四个维度同时拉开：
+
+| | 完成（`chime`） | 等待确认（`ping`） |
+|---|---|---|
+| 走向 | C6 → G6，**纯五度上行**：落定 | D6 → D6 → F6，**小三度**，悬着 | 
+| 节奏 | 2 个事件，间隔 200 ms | 3 个事件，间隔 100 ms |
+| 衰减 | 320 ms，钟声，会余韵 | 55–110 ms，干脆，说停就停 |
+| 音区 | 基频 1.0–1.6 kHz，加一个低八度做厚度 | 1.2–1.4 kHz 带八度泛音，不加低音：更薄更亮 |
+
+纯五度听起来"结束"，小三度听起来"没说完"，和插件想表达的意思是同一件事。而节奏差是最抗损耗的那条线索：三个短事件 vs 两个长事件，就算 4 kHz 以上全没了也分得出来。
+
+两个音的**响度刻意做得差不多**（-12.1 与 -13.0 LUFS，峰值 -1.1 与 -2.5 dBFS）：让它更抓人的是节奏和音色，不是更响。提醒音比铃声还响，就变成了惊吓。
 
 ## 它解决的问题
 
@@ -90,6 +109,7 @@ git clone https://github.com/neil-ji/dsh-session-chime.git
 | `/chime on` / `/chime off` | 临时开关（只影响当前 Host 进程，重启后回到配置值） |
 | `/chime test` | 立刻响一次"完成"声 |
 | `/chime test waiting` | 立刻响一次"等你确认"声 |
+| `/chime test both` | 先响完成声，1.4 秒后响等待声，方便对比 |
 | `/chime volume 0.4` | 临时改音量 |
 | `/chime mode chime` / `/chime mode speak` | 切换声音 / 语音播报 |
 | `/chime waiting on` / `/chime waiting off` | 要不要"等你确认"的提示 |
@@ -98,7 +118,8 @@ git clone https://github.com/neil-ji/dsh-session-chime.git
 ## 实现
 
 - `index.js`：Host 插件本体。监听 `agent/status`（并旁听 `api-session/status`）、`session/event`、`user-questions/request`、`approval/request`；用 `ctx.get('sessions').get(id).header.origin` 判断子代理；用 `ctx.get('commands').register()` 注册 `/chime`。
-- `audio.js`：合成两种声音（44.1 kHz / 16-bit / 单声道 WAV，写到系统临时目录并按音量缓存）并驱动一个常驻的 `powershell.exe` 助手进程。助手只在第一次出声时启动，之后每声只写一行 ASCII 命令（路径和中文文本以 base64 传递，避免 5.1 的管道编码问题），助手退出后自动重建；插件卸载时关闭它的 stdin。
+- `audio.js`：合成两种声音（44.1 kHz / 16-bit / 单声道 WAV）并播放。缓存文件名带**合成版本号 + 规格哈希**（`chime-v3-06fc775d-44100-80.wav`），所以改过声音定义之后不会继续播上一次的旧文件——这是上一版的一个真 bug：只按音量和采样率命名，升级后旧 WAV 会一直命中缓存。每段音频尾部有 20 ms 余弦淡出，最后一个采样精确为 0，不会以一个台阶结束。
+- Windows 上用一个常驻的 `powershell.exe` 助手进程：只在第一次出声时启动，之后每声只写一行 ASCII 命令（路径和中文文本以 base64 传递，避免 5.1 的管道编码问题），助手退出后自动重建；插件卸载时关闭它的 stdin。macOS / Linux 用一个短命的 detached 子进程播放，不值得养一个常驻进程。
 
 不依赖任何 npm 包，也不使用 `ctx.subprocess` 之类的工具沙箱服务：它需要的是这台机器的音频设备，而不是一个被沙箱约束的子进程。
 

@@ -113,6 +113,8 @@ export function apply(ctx, config) {
   /** sessionId → { keys: Map<requestKey, kind>, timer } for requests only a person can settle. */
   const waiting = new Map();
   let lastWaitingAt = 0;
+  /** Pending second half of `/chime test both`. */
+  let testTimer = null;
 
   /** Whether a Session belongs to a delegated child agent. */
   function isSubagent(sessionId) {
@@ -137,6 +139,10 @@ export function apply(ctx, config) {
       return false;
     }
     audio.mode = settings.mode;
+    // Reset the clip explicitly: `playWaiting` leaves `sound` on "ping", and a
+    // shared instance would otherwise keep playing the attention clip for every
+    // completion until the Host restarts.
+    audio.sound = 'chime';
     audio.volume = settings.volume;
     audio.speakText = settings.speakText;
     audio.wavPath = settings.wavPath;
@@ -351,14 +357,29 @@ export function apply(ctx, config) {
         settings.enabled = false;
         return success('提示音已关闭，输入 /chime on 恢复');
       case 'test': {
+        const both = argument === 'both';
         const waitingTest = argument === 'waiting' || argument === 'ping';
-        audio.mode = settings.mode;
-        audio.sound = waitingTest ? 'ping' : 'chime';
-        audio.volume = settings.volume;
-        audio.speakText = waitingTest ? settings.waitingSpeakText : settings.speakText;
-        audio.wavPath = settings.wavPath;
-        const played = audio.play();
+        const playOne = (sound) => {
+          audio.mode = settings.mode;
+          audio.sound = sound;
+          audio.volume = settings.volume;
+          audio.speakText = sound === 'ping' ? settings.waitingSpeakText : settings.speakText;
+          audio.wavPath = settings.wavPath;
+          return audio.play();
+        };
+        const played = playOne(waitingTest ? 'ping' : 'chime');
         if (played) lastPlayedAt = Date.now();
+        if (both) {
+          // Play the other one after the first has finished ringing, so the pair
+          // can be compared in one gesture. The timer is cleared on dispose.
+          clearTimeout(testTimer);
+          testTimer = setTimeout(() => {
+            testTimer = null;
+            playOne('ping');
+          }, 1400);
+          testTimer.unref?.();
+          return success(`先播放完成音，1.4 秒后播放等待确认音（${describe()}）`);
+        }
         return played
           ? success(`已播放${waitingTest ? '等待确认' : '完成'}测试音（${describe()}）`)
           : success('测试音播放失败，请查看 Host 日志');
@@ -399,7 +420,7 @@ export function apply(ctx, config) {
       default:
         return {
           kind: 'error',
-          text: '用法：/chime [status|on|off|test [waiting]|volume <0.05~1>|mode <chime|speak>|waiting <on|off>|subagents <on|off>]',
+          text: '用法：/chime [status|on|off|test [waiting|both]|volume <0.05~1>|mode <chime|speak>|waiting <on|off>|subagents <on|off>]',
         };
     }
   }
@@ -449,7 +470,7 @@ export function apply(ctx, config) {
           name: 'chime',
           description: '完成/需要确认提示音：开关、测试、音量、语音播报',
           input: {
-            hint: 'status|on|off|test [waiting]|volume <0.05~1>|mode <chime|speak>|waiting <on|off>|subagents <on|off>',
+            hint: 'status|on|off|test [waiting|both]|volume <0.05~1>|mode <chime|speak>|waiting <on|off>|subagents <on|off>',
           },
           handler: handleCommand,
         });
@@ -472,6 +493,10 @@ export function apply(ctx, config) {
       offApproval?.();
       offDisposed?.();
       offCommand?.();
+      if (testTimer) {
+        clearTimeout(testTimer);
+        testTimer = null;
+      }
       for (const timer of settling.values()) clearTimeout(timer);
       settling.clear();
       inFlight.clear();
